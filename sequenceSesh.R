@@ -25,3 +25,16 @@ filterAndTrim(fwd=file.path(pathF, fastqFs), filt=file.path(filtpathF, fastqFs),
               truncLen=c(240,200), maxEE=2, truncQ=11, maxN=0, rm.phix=TRUE,
               compress=TRUE, verbose=TRUE, multithread=TRUE)
 
+# Infer sequence variants
+# File parsing
+
+filtpathF <- "FNB/filtered" # CHANGE ME to the directory containing your filtered forward fastqs
+filtpathR <- "RNB/filtered"
+filtFs <- list.files(filtpathF, pattern="fastq.gz", full.names = TRUE)
+filtRs <- list.files(filtpathR, pattern="fastq.gz", full.names = TRUE)
+sample.names <- sapply(strsplit(basename(filtFs), "_"), `[`, 1) # Assumes filename = samplename_XXX.fastq.gz
+sample.namesR <- sapply(strsplit(basename(filtRs), "_"), `[`, 1) # Assumes filename = samplename_XXX.fastq.gz
+if(!identical(sample.names, sample.namesR)) stop("Forward and reverse files do not match.")
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+
