@@ -127,3 +127,8 @@ ps <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
 
 plot_bar(ps, fill="Phylum")
 
+ordu <- ordinate(ps, method = "NMDS", distance ="bray")
+p = plot_ordination(ps, ordu) + geom_point(size=7, alpha=0.75) + 
+  geom_text(fontface = "bold", mapping = aes(label = samdf$date), size = 4, vjust = 2) +
+  xlim(-0.5, 1.5) + ylim(-0.5, 0.5)
+
