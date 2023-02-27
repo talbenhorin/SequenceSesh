@@ -27,7 +27,6 @@ filterAndTrim(fwd=file.path(pathF, fastqFs), filt=file.path(filtpathF, fastqFs),
 
 # Infer sequence variants
 # File parsing
-
 filtpathF <- "FNB/filtered" 
 filtpathR <- "RNB/filtered"
 filtFs <- list.files(filtpathF, pattern="fastq.gz", full.names = TRUE)
@@ -60,7 +59,7 @@ for(sam in sample.names) {
   merger <- mergePairs(ddF, derepF, ddR, derepR)
   mergers[[sam]] <- merger
 }
-rm(derepF); rm(derepR)
+rm(derepF)
 
 # Construct sequence table
 seqtab <- makeSequenceTable(mergers)
@@ -81,3 +80,50 @@ head(taxa.print)
 ## Save files
 saveRDS(seqtab, "E:/tbenhor/libraries/Documents/SequenceSesh/Output/seqtab_final.rds") 
 saveRDS(tax, "E:/tbenhor/libraries/Documents/SequenceSesh/Output/tax_final.rds") 
+
+## START PHYLOSEQ WORKFLOW 
+library(ape)
+library(gridExtra)
+library(knitr)
+library(phyloseq); packageVersion("phyloseq")
+library(Biostrings); packageVersion("Biostrings")
+library(ggplot2); packageVersion("ggplot2")
+library(scales)
+theme_set(theme_bw())
+
+## Open Files if not using dada2 workflow
+seqtab <- readRDS("output/seqtab_final.rds")
+taxa <- readRDS("output/tax_final.rds")
+
+samples.out <- rownames(seqtab)
+samps <- read.csv("samps.csv", fill = FALSE, header = TRUE) 
+samdf <- data.frame(date=samps$date,ID=samps$sample) 
+rownames(samdf) <- samples.out
+
+## "Phyloseq" object from OTU table
+ps <- phyloseq(otu_table(seqtab, taxa_are_rows=FALSE), 
+               sample_data(samdf), 
+               tax_table(taxa))
+
+# Compute prevalence of each feature, store as data.frame
+prevdf = apply(X = otu_table(ps),
+               MARGIN = ifelse(taxa_are_rows(ps), yes = 1, no = 2),
+               FUN = function(x){sum(x > 0)})
+
+# Add taxonomy and total read counts to this data.frame
+prevdf = data.frame(Prevalence = prevdf,
+                    TotalAbundance = taxa_sums(ps),
+                    tax_table(ps))
+
+## Filtering
+#  Define prevalence threshold as 1% of total samples
+prevalenceThreshold = 0.01 * nsamples(ps)
+
+# Filter out prevalence
+keepTaxa = rownames(prevdf)[(prevdf$Prevalence >= prevalenceThreshold)]
+ps = prune_taxa(keepTaxa, ps)
+ps = tax_glom(ps, "Phylum", NArm = TRUE) #glom the pruned taxa 
+ps <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
+
+plot_bar(ps, fill="Phylum")
+
