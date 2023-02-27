@@ -7,6 +7,7 @@ BiocManager::install("dada2", version = "3.16")
 
 ## Kalle's dada2 fix
 ## install.packages("devtools")
+#install.packages("devtools")
 #library("devtools")
 #devtools::install_github("benjjneb/dada2", ref="v1.16") # change the ref argument to get other versions
 #library("devtools")
@@ -141,3 +142,5 @@ ordu <- ordinate(ps, "PCoA", "bray", weighted=FALSE)
 p = plot_ordination(ps, ordu) + geom_point(size=7, alpha=0.75) + 
   geom_text(fontface = "bold", mapping = aes(label = samdf$date), size = 4, vjust = 2) +
   xlim(-0.5, 1.0) + ylim(-0.25, 0.25)
+
+
