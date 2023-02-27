@@ -1,11 +1,31 @@
 rm(list=ls(all=TRUE))
 
-## Install dada2 package
+## Install packages
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("dada2", version = "3.16")
 
+## Kalle's dada2 fix
+#install.packages("devtools")
+#library("devtools")
+#devtools::install_github("benjjneb/dada2", ref="v1.16") # change the ref argument to get other versions
+#library("devtools")
+#devtools::install_github("benjjneb/dada2")
+#library("dada2")
+#library(dada2); packageVersion("dada2")
+#path <- "DADA2 tutorial//data//MiSeq_SOP"
+#list.files(path)
+
+## Load add-on packages
 library(dada2); packageVersion("dada2")
+library(ape)
+library(gridExtra)
+library(knitr)
+library(phyloseq); packageVersion("phyloseq")
+library(Biostrings); packageVersion("Biostrings")
+library(ggplot2); packageVersion("ggplot2")
+library(scales)
+theme_set(theme_bw())
 
 ## Filtering sequences
 pathF <- "FNB" 
@@ -46,7 +66,7 @@ errF <- learnErrors(filtFs, nbases=1e8, multithread=TRUE)
 # Learn reverse error rates
 errR <- learnErrors(filtRs, nbases=1e8, multithread=TRUE)
 
-# Sample inference and merger of paired-end reads
+## Sample inference and merger of paired-end reads
 mergers <- vector("list", length(sample.names))
 names(mergers) <- sample.names
 
@@ -61,11 +81,11 @@ for(sam in sample.names) {
 }
 rm(derepF)
 
-# Construct sequence table
+## Construct sequence table
 seqtab <- makeSequenceTable(mergers)
 saveRDS(seqtab, "E:/tbenhor/libraries/Documents/SequenceSesh/Output/seqtab.rds") # CHANGE ME to where you want sequence table saved
 
-# Remove chimeras
+## Remove chimeras
 st.all <- readRDS("E:/tbenhor/libraries/Documents/SequenceSesh/Output/seqtab.rds")
 seqtab <- removeBimeraDenovo(st.all, method="consensus", multithread=TRUE)
 
@@ -80,16 +100,6 @@ head(taxa.print)
 ## Save files
 saveRDS(seqtab, "E:/tbenhor/libraries/Documents/SequenceSesh/Output/seqtab_final.rds") 
 saveRDS(tax, "E:/tbenhor/libraries/Documents/SequenceSesh/Output/tax_final.rds") 
-
-## START PHYLOSEQ WORKFLOW 
-library(ape)
-library(gridExtra)
-library(knitr)
-library(phyloseq); packageVersion("phyloseq")
-library(Biostrings); packageVersion("Biostrings")
-library(ggplot2); packageVersion("ggplot2")
-library(scales)
-theme_set(theme_bw())
 
 ## Open Files if not using dada2 workflow
 seqtab <- readRDS("output/seqtab_final.rds")
@@ -127,8 +137,7 @@ ps <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
 
 plot_bar(ps, fill="Phylum")
 
-ordu <- ordinate(ps, method = "NMDS", distance ="bray")
+ordu <- ordinate(ps, "PCoA", "bray", weighted=FALSE)
 p = plot_ordination(ps, ordu) + geom_point(size=7, alpha=0.75) + 
   geom_text(fontface = "bold", mapping = aes(label = samdf$date), size = 4, vjust = 2) +
-  xlim(-0.5, 1.5) + ylim(-0.5, 0.5)
-
+  xlim(-0.5, 1.0) + ylim(-0.25, 0.25)
