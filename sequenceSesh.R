@@ -4,20 +4,7 @@ rm(list=ls(all=TRUE))
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("dada2", version = "3.16")
-install.packages("dada2")
-install.packages("phyloseq")
-
-## Kalle's dada2 fix
-## install.packages("devtools")
-#install.packages("devtools")
-#library("devtools")
-#devtools::install_github("benjjneb/dada2", ref="v1.16") # change the ref argument to get other versions
-#library("devtools")
-#devtools::install_github("benjjneb/dada2")
-#library("dada2")
-#library(dada2); packageVersion("dada2")
-#path <- "DADA2 tutorial//data//MiSeq_SOP"
-#list.files(path)
+BiocManager::install("phyloseq")
 
 ## Load add-on packages
 library(dada2); packageVersion("dada2")
