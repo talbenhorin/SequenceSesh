@@ -4,6 +4,8 @@ rm(list=ls(all=TRUE))
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("dada2", version = "3.16")
+install.packages("dada2")
+install.packages("phyloseq")
 
 ## Kalle's dada2 fix
 ## install.packages("devtools")
