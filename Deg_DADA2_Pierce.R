@@ -1,3 +1,5 @@
+##SKIP TO LINE 104 AFTER LOADING LIBRARIES!!!!!!!!!!!!!!!!!!!!!!!!!!
+#Saving File into GitHub repository
 rm(list=ls(all=TRUE))
 sessionInfo()
 ## Install dada2 package
@@ -5,13 +7,17 @@ install.packages("BiocManager")
 BiocManager::install("dada2")
 library(dada2); packageVersion("dada2")
 install.packages("dada2")
+library(dada2)
 library(ape)
 library(gridExtra)
 library(knitr)
 library(phyloseq); packageVersion("phyloseq")
+citation('phyloseq')
 library(Biostrings); packageVersion("Biostrings")
 library(ggplot2); packageVersion("ggplot2")
 library(scales)
+library(ggpubr)
+library(tidyr)
 theme_set(theme_bw())
 
 ## Filtering sequences
@@ -80,8 +86,8 @@ st.all <- readRDS("Deg_seqtab.rds")
 seqtab <- removeBimeraDenovo(st.all, method="consensus", multithread=TRUE)
 
 # Assign taxonomy
-tax <- assignTaxonomy(seqtab, "silva_nr_v132_train_set.fa.gz", multithread=TRUE)#get tax
-tax <- addSpecies(tax, "silva_species_assignment_v132.fa.gz")
+tax <- assignTaxonomy(seqtab, "silva_nr99_v138.1_train_set.fa", multithread=TRUE)#get tax
+tax <- addSpecies(tax, "silva_species_assignment_v138.1.fa")
 taxa.print <- tax # Removing sequence rownames for display only
 rownames(taxa.print) <- NULL
 head(taxa.print)
@@ -98,6 +104,7 @@ track
 ## Save files
 saveRDS(seqtab, "Deg_Seqtab_Final.rds") 
 saveRDS(tax, "Deg_Tax_Final.rds") 
+#When Rerunning from an empty environment START HERE and make PierceV4V5 working dir.
 seqtab <- readRDS("Deg_Seqtab_Final.rds")
 taxa <- readRDS("Deg_Tax_Final.rds")
 samples.out <- rownames(seqtab)
@@ -113,6 +120,7 @@ ps <- phyloseq(otu_table(seqtab, taxa_are_rows=FALSE),
                tax_table(taxa))
 
 # Compute prevalence of each feature, store as data.frame
+nsamples(ps)
 prevdf = apply(X = otu_table(ps),
                MARGIN = ifelse(taxa_are_rows(ps), yes = 1, no = 2),
                FUN = function(x){sum(x > 0)})
@@ -129,34 +137,189 @@ prevalenceThreshold = 0.01 * nsamples(ps)
 # Filter out prevalence
 keepTaxa = rownames(prevdf)[(prevdf$Prevalence >= prevalenceThreshold)]
 ps1 = prune_taxa(keepTaxa, ps)
-ps1
 ps2 = tax_glom(ps1, "Genus", NArm = TRUE) #glom the pruned taxa, glomming condenses taxonomic data at specific level
+ps0 = tax_glom(ps, "Genus", NArm = TRUE)
+otu_table(ps0)
+
+##Attempting to export phyloseq object as dataframe for ESA
+OTU1 = as(otu_table(ps), "matrix")
+if(taxa_are_rows(ps)){OTU1 <- t(OTU1)}
+# Coerce to data.frame
+OTUdf = as.data.frame(OTU1)
+OTUdf
+write.csv(OTUdf,"OTU.csv")
+##OTU.csv gives you a count of each ASV/OTU in each sample
+TAX = as(tax_table(ps), "matrix")
+if(taxa_are_rows(ps)){TAX <- t(TAX)}
+TAXdf = as.data.frame(TAX)
+TAXdf
+write.csv(TAXdf,"Taxa.csv")
+##Taxa.csv gives the taxonomic assignment for each unique ASV/OTU
+
+#transform read counts to relative abundance data
+ps0.rel <- transform_sample_counts(ps0, function(OTU) OTU/sum(OTU))
+OTU2 = as(otu_table(ps0.rel), "matrix")
+if(taxa_are_rows(ps0.rel)){OTU2 <- t(OTU2)}
+OTUdf2 = as.data.frame(OTU2)
+write.csv(OTUdf2,"ps0.rel.csv")
+##ps0.rel.csv gives the relative abundance of each genus in each sample
+
+#Gather data into long format for easier reading and plotting
+OTU.long<-read.csv("ps0.rel.csv",header=TRUE,sep=",")
+OTU.long<-gather(OTU.long,Genus,Rel.Abun,Microcystis.PCC.7914:Sphingopyxis,factor_key=TRUE)
+write.csv(OTU.long, "ps0.rel.long.csv")
+#I manually edited the sheet to include a column for site
+OTU.long.2<-read.csv("ps0.rel.long.csv",header=TRUE,sep=",")
+
+##Load in color palette and establish colors for plotting
+library(paletteer) 
+paletteer_d("ggthemes::Miller_Stone")
+new_p<-paletteer_d("ggthemes::Miller_Stone")
+new_p3<-c("#4F6980FF","#B66353FF","#7E756DFF")
 
 ##Plot top 10 genera bar plot
-top10 <- names(sort(taxa_sums(ps2), decreasing=TRUE))[1:10]
-ps2.top10 <- transform_sample_counts(ps2, function(OTU) OTU/sum(OTU))
-ps2.top10 <- prune_taxa(top10, ps2.top10)
-ps2.top10
-names <- taxa_names(ps2.top10)
-names
-plot_bar(ps2.top10, fill="Genus")+ 
-  scale_fill_brewer(palette='Paired')+
-  theme_classic(base_size=24)+
+top10 <- names(sort(taxa_sums(ps0), decreasing=TRUE))[1:10]
+ps.top10 <- transform_sample_counts(ps0, function(OTU) OTU/sum(OTU))
+ps.top10 <- prune_taxa(top10, ps.top10)
+names <- taxa_names(ps.top10)
+plot_bar(ps.top10, fill="Genus")+ 
+  theme_classic()+
   scale_x_discrete(limits=c("AH1T0", "AH2T0", "AH3T0", "CR3T0", "CR8", "CR10", "CR14", "IR1T0", "IR2T0", "IR3T0", "LL1T0", "LL2T0", "LL3T0", "MC1T0", "MC2T0","MC3T0", 'CH1T0','CH2T0','CH3T0'))+
+  ylab('Relative Abundance (%)')+
+  scale_fill_manual(values=new_p)+
+  theme_pubr()+
   theme(axis.text.x = element_text(angle=60, hjust=1))+
-  ylab('Relative Abundance (%)')
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(expand=c(0,0))
 
+OTUtop10 = as(otu_table(ps.top10), "matrix")
+if(taxa_are_rows(ps.top10)){OTUtop10 <- t(OTUtop10)}
+OTUtop10df = as.data.frame(OTUtop10)
+write.csv(OTUtop10df,"OTUtop10.csv")
+TAXtop10 = as(tax_table(ps.top10), "matrix")
+if(taxa_are_rows(ps.top10)){TAXtop10 <- t(TAXtop10)}
+TAXtop10df = as.data.frame(TAXtop10)
+write.csv(TAXtop10df,"Taxatop10.csv")
+##At this step I manually transposed the names of the top 10 taxa as the column names for the top 10 OTUs and added a column for Other 
 
-##Plot top 20 genera bar plot
-top20<-names(sort(taxa_sums(ps2), decreasing=TRUE))[1:20]
-ps2.top20 <- transform_sample_counts(ps2, function(OTU) OTU/sum(OTU))
-ps2.top20 <- prune_taxa(top20, ps2.top20)
-names20<-taxa_names(ps2.top20)
-plot_bar(ps2.top20, fill="Genus")
+#Gather top 10 asv/otu data into long format
+OTUtop10.long<-read.csv("OTUtop10.csv",header=TRUE,sep=",")
+OTUtop10.long<-gather(OTUtop10.long,Genus,Rel.Abun,Microcystis.PCC.7914:Other,factor_key=TRUE)
+
+#Make genus a factor with specified levels inluding 'Other'
+levels(as.factor(OTUtop10.long$Genus))
+Genus.Fill<-factor(OTUtop10.long$Genus, levels = c("Other",
+                                     "Ellin6067","Flavobacterium","Flectobacillus", "Microcystis.PCC.7914",
+                                     "Paucibacter","Phenylobacterium","Pseudanabaena.PCC.7429","Roseomonas","Sediminibacterium","Vogesella"))
+
+##plot top 10 by sample
+fig.5<-ggplot(OTUtop10.long)+geom_col(aes(x=Sample,y=Rel.Abun,fill=Genus.Fill))+
+  ylab('Relative Abundance (%)')+
+  labs(fill="Genus")+
+  scale_fill_manual(values=new_p)+
+  theme_pubr(base_size = 12)+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(limits=c("AH1T0", "AH2T0", "AH3T0", "CR3T0", "CR8", "CR10", "CR14", "IR1T0", "IR2T0", "IR3T0", "LL1T0", "LL2T0", "LL3T0", "MC1T0", "MC2T0","MC3T0", 'CH1T0','CH2T0','CH3T0'))+
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+fig.5
+ggsave("fig.5.prospectus.pdf",plot=fig.5,width=8,height=5,dpi=300)
+
+#Plot individual sample triplicates
+ggplot(OTU.long.2)+geom_tile(aes(x=Sample,y=Genus,fill=Rel.Abun))
+AH<-subset(OTU.long.2,Site%in%"AH")
+AH<-subset(AH, Rel.Abun>0)
+ggplot(AH)+geom_tile(aes(x=Sample,y=Genus,fill=Rel.Abun))
+AH.5<-subset(AH, Rel.Abun>0.05)
+ggplot(AH.5)+geom_col(aes(x=Sample,y=Rel.Abun,fill=Genus))+
+  scale_x_discrete(limits=c("AH1T0", "AH2T0", "AH3T0"))+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  ylab('Relative Abundance (%)')+
+  labs(fill="Genus")+
+  scale_fill_manual(values=new_p)+
+  theme_pubr()+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(expand=c(0,0))
+
+CH<-subset(OTU.long.2,Site%in%"CH")
+CH<-subset(CH, Rel.Abun>0)
+ggplot(CH)+geom_tile(aes(x=Sample,y=Genus,fill=Rel.Abun))
+CH.5<-subset(CH, Rel.Abun>0.05)
+ggplot(CH.5)+geom_col(aes(x=Sample,y=Rel.Abun,fill=Genus))+
+  scale_x_discrete(limits=c("CH1T0", "CH2T0", "CH3T0"))+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  ylab('Relative Abundance (%)')+
+  labs(fill="Genus")+
+  scale_fill_manual(values=new_p)+
+  theme_pubr()+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(expand=c(0,0))
+
+CR<-subset(OTU.long.2,Site%in%"CR")
+CR<-subset(CR, Rel.Abun>0)
+ggplot(CR)+geom_tile(aes(x=Sample,y=Genus,fill=Rel.Abun))
+CR.5<-subset(CR, Rel.Abun>0.05)
+ggplot(CR.5)+geom_col(aes(x=Sample,y=Rel.Abun,fill=Genus))+
+  scale_x_discrete(limits=c("CR3T0", "CR8", "CR10", "CR14"))+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  ylab('Relative Abundance (%)')+
+  labs(fill="Genus")+
+  scale_fill_manual(values=new_p)+
+  theme_pubr()+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(expand=c(0,0))
+
+LL<-subset(OTU.long.2,Site%in%"LL")
+LL<-subset(LL, Rel.Abun>0)
+ggplot(LL)+geom_tile(aes(x=Sample,y=Genus,fill=Rel.Abun))
+LL.5<-subset(LL, Rel.Abun>0.05)
+ggplot(LL.5)+geom_col(aes(x=Sample,y=Rel.Abun,fill=Genus))+
+  scale_x_discrete(limits=c("LL1T0", "LL2T0", "LL3T0"))+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  ylab('Relative Abundance (%)')+
+  labs(fill="Genus")+
+  scale_fill_manual(values=new_p)+
+  theme_pubr()+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(expand=c(0,0))
+
+IR<-subset(OTU.long.2,Site%in%"IR")
+IR<-subset(IR, Rel.Abun>0)
+ggplot(IR)+geom_tile(aes(x=Sample,y=Genus,fill=Rel.Abun))
+IR.5<-subset(IR, Rel.Abun>0.05)
+ggplot(IR.5)+geom_col(aes(x=Sample,y=Rel.Abun,fill=Genus))+
+  scale_x_discrete(limits=c("IR1T0", "IR2T0", "IR3T0"))+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  ylab('Relative Abundance (%)')+
+  labs(fill="Genus")+
+  scale_fill_manual(values=new_p)+
+  theme_pubr()+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(expand=c(0,0))
+
+MC<-subset(OTU.long.2,Site%in%"MC")
+MC<-subset(MC, Rel.Abun>0)
+ggplot(MC)+geom_tile(aes(x=Sample,y=Genus,fill=Rel.Abun))
+MC.5<-subset(MC, Rel.Abun>0.05)
+ggplot(MC.5)+geom_col(aes(x=Sample,y=Rel.Abun,fill=Genus))+
+  scale_x_discrete(limits=c("MC1T0", "MC2T0", "MC3T0"))+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  ylab('Relative Abundance (%)')+
+  labs(fill="Genus")+
+  scale_fill_manual(values=new_p)+
+  theme_pubr()+
+  theme(axis.text.x = element_text(angle=60, hjust=1))+
+  scale_y_continuous(expand=c(0,0), breaks = c(0,.25,.50,.75,1), labels=c(0,25,50,75,100))+
+  scale_x_discrete(expand=c(0,0))
 
 ##Plot top 10 genera heat map
-p1 = plot_heatmap(ps2.top10, taxa.label = "Genus",low="white", high="#000033", 
-                  na.value = "white",taxa.order = taxa_names(ps2.top10),
+p1 = plot_heatmap(ps.top10, taxa.label = "Genus",low="white", high="#000033", 
+                  na.value = "white",taxa.order = taxa_names(ps.top10),
                   trans = identity_trans())
 p1 = p1  + theme(axis.text.x = element_text(size=8, angle=30, hjust=1, vjust=0.9),
                  legend.title = element_text(size = 10)) +
@@ -164,40 +327,49 @@ p1 = p1  + theme(axis.text.x = element_text(size=8, angle=30, hjust=1, vjust=0.9
 p1
 
 ##Plot NMDS plot
-ord.nmds.bray <- ordinate(ps2, method="NMDS", distance="bray")
-nmds<-plot_ordination(ps2, ord.nmds.bray, color="Site", shape="Date", title=" ")
+ord.nmds.bray <- ordinate(ps0, method="NMDS", distance="bray")
+ord.nmds.bray
+nmds<-plot_ordination(ps0, ord.nmds.bray, color="Site", shape="Date", title=" ")
 nmds = nmds + geom_point(size=7, alpha=0.75)
-nmds= nmds+ scale_color_brewer(palette="Set1")
-nmds = nmds + geom_text(mapping = aes(label = samdf$ID), size = 4, vjust = 1.5) 
-nmds = nmds+theme_bw(base_size = 24)
-nmds
+nmds= nmds+ scale_color_manual(values=new_p)
+nmds = nmds + annotate('text',label='Stress = 0.07', x=1.5,y=0.6,size = 4, vjust = 1.5) 
+nmds = nmds+theme_bw(base_size = 12)
+fig.6<-nmds
+fig.6
+ggsave("fig.6.prospectus.pdf",plot=fig.6,width=7,height=5,dpi=300)
 
-ps2.top10@tax_table
 ##Plot Species Richness Data
-plot_richness(ps, measures=c("Shannon", "Simpson"), color="Site")+scale_color_brewer(palette = "Set1")
+plot_richness(ps0, measures="Shannon", color="Site")+scale_color_manual(values=new_p)+
+  theme_pubr()
 
+##Load in Toxin Data to compare MC conc and microcystis rel. abund.()
 MCY_Results<-read.csv("Deg_MCY_Abun.csv",header=TRUE,sep=',')
-ggplot(MCY_Results)+geom_point(aes(x=Rel_Abun,y=log(Tot_MCY),color=Site,shape=Date))+
-  geom_abline(slope=10,intercept=0)
-  #geom_smooth(aes(x=Avg_Rel_Abun,y=Avg_Tot_MCY), method='lm', formula=(y~exp(x)))
-Exp.Model<-lm((log(Avg_Tot_MCY)~Avg_Rel_Abun), MCY_Results)
-summary(Exp.Model)  
-
-x<-seq(0,0.7,0.01)
-y=(4.473*exp(9.1453*x))
-plot(x,y)
-MCY_Res<-rbind(MCY_Results[2:6,],MCY_Results[10:16,],MCY_Results[19,])
+MCY_Res<-rbind(MCY_Results[3,],MCY_Results[6,],MCY_Results[10,],MCY_Results[13,],MCY_Results[16,],MCY_Results[19,])
 TTox_label<-expression(Total ~ Microcystin ~ (µg ~ L^"-1"))
-scatplot<-ggplot()+geom_point(data=MCY_Res,aes(x=Rel_Abun,y=Tot_MCY,color=Site,shape=Date), size=5)+
-  scale_color_brewer(palette='Set1')+
+MCY_Results_na<-subset(MCY_Results, Part_MCY>0)
+
+#Build log-transformed model
+Exp.Model<-lm(log(Tot_MCY)~Avg_Rel_Abun,data=MCY_Results_na)
+summary(Exp.Model)
+
+#Plot log-transformed model
+ggplot(data=MCY_Results_na)+geom_point(aes(x=Rel_Abun,y=log(Tot_MCY),color=Site,shape=Date), size=5)+
+  geom_smooth(aes(x=Rel_Abun,y=Tot_MCY), method='lm', formula=(log(y)~x))+
+  scale_color_manual(values=new_p)
+
+#input exponential model
+x<-seq(0,0.7,0.01)
+y=(2.3845*exp(10.147*x))
+plot(x,y)
+
+#plot exponential model
+fig.7<-ggplot()+geom_point(data=MCY_Results_na,aes(x=Rel_Abun,y=Tot_MCY,color=Site,shape=Date), size=5)+
   geom_line(aes(x=x,y=y))+
-  ylim(0,1200)+
   ylab(TTox_label)+
-  xlab('Rel. Abundance of Microcystis')+
-  theme_classic(base_size = 24)
-scatplot
-plot(x,y,type="l")
-ggarrange(scatplot,nmds,
-          nrow = 1,ncol = 2,common.legend = TRUE,
-          legend = 'right')
-#geom_smooth(aes(x=Avg_Rel_Abun,y=Avg_Tot_MCY), method='lm', formula=(y~exp(x)))
+  xlab('Average Relative Abundance of Microcystis')+
+  scale_color_manual(values=new_p)+
+  scale_y_continuous(expand =c(0,0),limits=c(0,1200))+
+  theme_pubr(base_size = 12)+
+  theme(axis.ticks.y = element_line(size=1), axis.ticks.length=unit(5,"pt"))
+fig.7
+ggsave("fig.7.prospectus.pdf",plot=fig.7,width=7,height=5,dpi=300)
